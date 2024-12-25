@@ -4,7 +4,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import ta  # For technical indicators
+import pandas_ta as ta # For technical indicators
 import yfinance as yf  # For fetching live market data
 
 # Streamlit App Configuration
