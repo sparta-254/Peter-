@@ -28,10 +28,11 @@ def fetch_data(ticker, period, interval):
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
         
-        # Reset index to flatten multi-index if necessary
-        data = data.reset_index()
-
-        # Ensure the "Close" column exists
+        # Flatten multi-index columns (if any)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = ['_'.join(col).strip() for col in data.columns]
+        
+        # Ensure "Close" column exists
         if "Close" not in data.columns:
             st.error("No 'Close' column in the data. Unable to calculate indicators.")
             return None
