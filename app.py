@@ -26,23 +26,23 @@ def fetch_data(ticker, period, interval):
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
 
-        # Debugging: Display raw data structure
-        st.write("Raw Data Structure:")
-        st.write(data.head())
-        
-        # Ensure data is not empty
-        if data.empty:
-            st.error("Data is empty. The ticker may be invalid or unavailable for the selected timeframe.")
-            return None
-
         # Flatten multi-index columns if they exist
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(col).strip() for col in data.columns]
 
-        # Check for 'Close' column explicitly
-        if "Close" not in data.columns:
-            st.error("'Close' column not found in the data. Please verify the ticker and timeframe.")
+        # Ensure 'Close' column exists
+        if f"Close_{ticker}" not in data.columns:
+            st.error(f"'Close' column not found in the data for {ticker}.")
             return None
+
+        # Rename columns for simplicity
+        data = data.rename(columns={
+            f"Close_{ticker}": "Close",
+            f"High_{ticker}": "High",
+            f"Low_{ticker}": "Low",
+            f"Open_{ticker}": "Open",
+            f"Volume_{ticker}": "Volume"
+        })
 
         return data
     except Exception as e:
@@ -58,32 +58,35 @@ if data is not None:
 
     # Calculate Indicators
     try:
-        # Calculate and display selected indicator
-        if indicator == "SMA":
-            data["SMA"] = ta.sma(data["Close"], length=14)
-            st.line_chart(data[["Close", "SMA"]])
-        elif indicator == "EMA":
-            data["EMA"] = ta.ema(data["Close"], length=14)
-            st.line_chart(data[["Close", "EMA"]])
-        elif indicator == "RSI":
-            data["RSI"] = ta.rsi(data["Close"], length=14)
-            st.line_chart(data[["RSI"]])
-        elif indicator == "MACD":
-            macd = ta.macd(data["Close"], fast=12, slow=26, signal=9)
-            if macd is not None:
-                data["MACD"] = macd["MACD_12_26_9"]
-                data["Signal"] = macd["MACDs_12_26_9"]
-                st.line_chart(data[["MACD", "Signal"]])
-        elif indicator == "Bollinger Bands":
-            bollinger = ta.bbands(data["Close"], length=20, std=2.0)
-            if bollinger is not None:
-                data["Bollinger High"] = bollinger["BBU_20_2.0"]
-                data["Bollinger Low"] = bollinger["BBL_20_2.0"]
-                st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
+        if "Close" in data.columns:
+            # Calculate indicators
+            if indicator == "SMA":
+                data["SMA"] = ta.sma(data["Close"], length=14)
+                st.line_chart(data[["Close", "SMA"]])
+            elif indicator == "EMA":
+                data["EMA"] = ta.ema(data["Close"], length=14)
+                st.line_chart(data[["Close", "EMA"]])
+            elif indicator == "RSI":
+                data["RSI"] = ta.rsi(data["Close"], length=14)
+                st.line_chart(data[["RSI"]])
+            elif indicator == "MACD":
+                macd = ta.macd(data["Close"], fast=12, slow=26, signal=9)
+                if macd is not None:
+                    data["MACD"] = macd["MACD_12_26_9"]
+                    data["Signal"] = macd["MACDs_12_26_9"]
+                    st.line_chart(data[["MACD", "Signal"]])
+            elif indicator == "Bollinger Bands":
+                bollinger = ta.bbands(data["Close"], length=20, std=2.0)
+                if bollinger is not None:
+                    data["Bollinger High"] = bollinger["BBU_20_2.0"]
+                    data["Bollinger Low"] = bollinger["BBL_20_2.0"]
+                    st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
 
-        # Display the processed data
-        st.subheader("Processed Data")
-        st.dataframe(data.tail())
+            # Display processed data
+            st.subheader("Processed Data")
+            st.dataframe(data.tail())
+        else:
+            st.error("No 'Close' column found in the data. Unable to calculate indicators.")
     except Exception as e:
         st.error(f"Error calculating indicators: {e}")
 else:
