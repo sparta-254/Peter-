@@ -3,8 +3,8 @@
 
 import streamlit as st
 import pandas as pd
-import pandas_ta as ta  # For technical indicators
-import yfinance as yf   # For fetching live market data
+import pandas_ta as ta
+import yfinance as yf
 
 # Streamlit App Configuration
 st.title("Trading Signal Dashboard")
@@ -27,20 +27,20 @@ def fetch_data(ticker, period, interval):
     try:
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
-        
-        # Debug: Display raw data structure and column names
-        st.write("Raw data structure:", data)
-        st.write("Columns in data:", data.columns.tolist())
 
+        # Debugging: Display raw data
+        st.write("Raw Data Preview:")
+        st.write(data.head())
+        
         # Flatten multi-index columns if they exist
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(col).strip() for col in data.columns]
         
         # Ensure "Close" column exists
         if "Close" not in data.columns:
-            st.error("No 'Close' column in the data. Unable to calculate indicators.")
+            st.error("No 'Close' column found. Check the ticker and timeframe.")
             return None
-        
+
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
