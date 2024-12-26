@@ -26,12 +26,29 @@ def fetch_data(ticker, period, interval):
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
 
+        # Handle MultiIndex columns by flattening them
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = ['_'.join(col).strip() for col in data.columns]
+
+        # Rename columns for simplicity if needed
+        for column in data.columns:
+            if "Close" in column:
+                data.rename(columns={column: "Close"}, inplace=True)
+            if "High" in column:
+                data.rename(columns={column: "High"}, inplace=True)
+            if "Low" in column:
+                data.rename(columns={column: "Low"}, inplace=True)
+            if "Open" in column:
+                data.rename(columns={column: "Open"}, inplace=True)
+            if "Volume" in column:
+                data.rename(columns={column: "Volume"}, inplace=True)
+
         # Ensure 'Close' column exists
-        if data.empty or "Close" not in data.columns:
-            st.error(f"No valid data found for {ticker} with period '{period}' and interval '{interval}'.")
+        if "Close" not in data.columns:
+            st.error("No 'Close' column found in the data. Unable to calculate indicators.")
             return None
 
-        # Reset index and prepare data
+        # Reset index for processing
         data.reset_index(inplace=True)
         return data
     except Exception as e:
