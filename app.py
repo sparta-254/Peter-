@@ -28,7 +28,11 @@ def fetch_data(ticker, period, interval):
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
         
-        # Flatten multi-index columns (if any)
+        # Debug: Display raw data structure and column names
+        st.write("Raw data structure:", data)
+        st.write("Columns in data:", data.columns.tolist())
+
+        # Flatten multi-index columns if they exist
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(col).strip() for col in data.columns]
         
@@ -51,9 +55,8 @@ if data is not None and not data.empty:
 
     # Calculate Indicators
     try:
-        # Ensure the "Close" column exists for calculations
         if "Close" in data.columns:
-            # Calculate indicators based on the user selection
+            # Calculate indicators
             if indicator == "SMA":
                 data["SMA"] = ta.sma(data["Close"], length=14)
                 st.line_chart(data[["Close", "SMA"]])
