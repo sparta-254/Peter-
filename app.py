@@ -30,10 +30,8 @@ def fetch_data(ticker, period, interval):
         
         # Debug: Check if data is fetched
         if data is None or data.empty:
-            st.warning(f"No data found for {ticker}. The ticker might be invalid or delisted.")
             return None
         
-        st.write(f"Data fetched successfully: {data.shape} rows")
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -42,11 +40,11 @@ def fetch_data(ticker, period, interval):
 # Fetch the data
 data = fetch_data(ticker, period, timeframe)
 
-if data is not None:
+if data is not None and not data.empty:
     st.write("Raw Data Sample:")
     st.dataframe(data.head())
 
-    # Calculate Indicators
+    # Validate data before calculating indicators
     try:
         if "Close" in data.columns:
             # Calculate indicators
@@ -56,13 +54,15 @@ if data is not None:
 
             # MACD
             macd = ta.macd(data["Close"], fast=12, slow=26, signal=9)
-            data["MACD"] = macd["MACD_12_26_9"]
-            data["Signal"] = macd["MACDs_12_26_9"]
+            if macd is not None:
+                data["MACD"] = macd["MACD_12_26_9"]
+                data["Signal"] = macd["MACDs_12_26_9"]
 
             # Bollinger Bands
             bollinger = ta.bbands(data["Close"], length=20, std=2.0)
-            data["Bollinger High"] = bollinger["BBU_20_2.0"]
-            data["Bollinger Low"] = bollinger["BBL_20_2.0"]
+            if bollinger is not None:
+                data["Bollinger High"] = bollinger["BBU_20_2.0"]
+                data["Bollinger Low"] = bollinger["BBL_20_2.0"]
 
             # Display Data
             st.subheader(f"Price Data for {ticker}")
@@ -76,9 +76,9 @@ if data is not None:
                 st.line_chart(data[["Close", "EMA"]])
             elif indicator == "RSI":
                 st.line_chart(data[["RSI"]])
-            elif indicator == "MACD":
+            elif indicator == "MACD" and "MACD" in data.columns and "Signal" in data.columns:
                 st.line_chart(data[["MACD", "Signal"]])
-            elif indicator == "Bollinger Bands":
+            elif indicator == "Bollinger Bands" and "Bollinger High" in data.columns and "Bollinger Low" in data.columns:
                 st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
 
             # Signal Output
@@ -91,7 +91,7 @@ if data is not None:
                     st.error("Sell Signal (Overbought)")
                 else:
                     st.info("Neutral Signal")
-            elif indicator == "MACD":
+            elif indicator == "MACD" and "MACD" in data.columns and "Signal" in data.columns:
                 latest_macd = data["MACD"].iloc[-1]
                 latest_signal = data["Signal"].iloc[-1]
                 if latest_macd > latest_signal:
