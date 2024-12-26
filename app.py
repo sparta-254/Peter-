@@ -16,9 +16,9 @@ ticker = st.sidebar.text_input("Enter Stock/Asset Ticker (e.g., AAPL, BTC-USD)",
 timeframe = st.sidebar.selectbox("Select Timeframe", ["1m", "5m", "15m", "1h", "1d"])
 indicator = st.sidebar.selectbox("Select Indicator", ["SMA", "EMA", "RSI", "MACD", "Bollinger Bands"])
 
-# Adjust period based on the selected timeframe
+# Adjust period dynamically based on the selected timeframe
 if timeframe == "1m":
-    period = "7d"  # Limit to 7 days for 1-minute data
+    period = "5d"  # Use 5 days for 1-minute interval
 else:
     period = "1mo"  # Default to 1 month for other intervals
 
