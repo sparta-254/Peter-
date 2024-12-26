@@ -31,25 +31,9 @@ def fetch_data(ticker, period, interval):
         if data.empty:
             st.warning(f"No data found for {ticker}. The ticker might be invalid or delisted.")
             return None
-        # Calculate indicators
-        data["SMA"] = ta.sma(data["Close"], length=14)
-        data["EMA"] = ta.ema(data["Close"], length=14)
-        data["RSI"] = ta.rsi(data["Close"], length=14)
-        
-        macd = ta.macd(data["Close"])
-        if macd is not None:
-            data["MACD"] = macd["MACD_12_26_9"]
-            data["Signal"] = macd["MACDs_12_26_9"]
-        else:
-            data["MACD"], data["Signal"] = np.nan, np.nan
-        
-        bollinger = ta.bbands(data["Close"])
-        if bollinger is not None:
-            data["Bollinger High"] = bollinger["BBU_20_2.0"]
-            data["Bollinger Low"] = bollinger["BBL_20_2.0"]
-        else:
-            data["Bollinger High"], data["Bollinger Low"] = np.nan, np.nan
-        
+        # Ensure single-level columns (flatten if necessary)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = [' '.join(col).strip() for col in data.columns.values]
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -58,23 +42,57 @@ def fetch_data(ticker, period, interval):
 # Fetch the data
 data = fetch_data(ticker, period, timeframe)
 
-# Display Data and Charts
 if data is not None:
+    # Calculate Indicators
+    data["SMA"] = ta.sma(data["Close"], length=14)
+    data["EMA"] = ta.ema(data["Close"], length=14)
+    data["RSI"] = ta.rsi(data["Close"], length=14)
+    
+    macd = ta.macd(data["Close"])
+    if macd is not None:
+        data["MACD"] = macd["MACD_12_26_9"]
+        data["Signal"] = macd["MACDs_12_26_9"]
+    else:
+        data["MACD"], data["Signal"] = np.nan, np.nan
+    
+    bollinger = ta.bbands(data["Close"])
+    if bollinger is not None:
+        data["Bollinger High"] = bollinger["BBU_20_2.0"]
+        data["Bollinger Low"] = bollinger["BBL_20_2.0"]
+    else:
+        data["Bollinger High"], data["Bollinger Low"] = np.nan, np.nan
+
+    # Display Data
     st.subheader(f"Price Data for {ticker}")
     st.dataframe(data.tail())
 
     # Plot Selected Indicator
     st.subheader(f"{indicator} Indicator Chart")
     if indicator == "SMA":
-        st.line_chart(data[["Close", "SMA"]])
+        if "SMA" in data.columns:
+            st.line_chart(data[["Close", "SMA"]])
+        else:
+            st.warning("SMA not calculated.")
     elif indicator == "EMA":
-        st.line_chart(data[["Close", "EMA"]])
+        if "EMA" in data.columns:
+            st.line_chart(data[["Close", "EMA"]])
+        else:
+            st.warning("EMA not calculated.")
     elif indicator == "RSI":
-        st.line_chart(data[["RSI"]])
+        if "RSI" in data.columns:
+            st.line_chart(data[["RSI"]])
+        else:
+            st.warning("RSI not calculated.")
     elif indicator == "MACD":
-        st.line_chart(data[["MACD", "Signal"]])
+        if "MACD" in data.columns and "Signal" in data.columns:
+            st.line_chart(data[["MACD", "Signal"]])
+        else:
+            st.warning("MACD not calculated.")
     elif indicator == "Bollinger Bands":
-        st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
+        if "Bollinger High" in data.columns and "Bollinger Low" in data.columns:
+            st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
+        else:
+            st.warning("Bollinger Bands not calculated.")
 
     # Signal Output
     st.subheader("Trading Signals")
