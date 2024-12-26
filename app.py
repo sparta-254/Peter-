@@ -1,4 +1,5 @@
-# Install required libraries
+import numpy as np
+print(f"Numpy version: {np.__version__}")# Install required libraries
 # pip install streamlit pandas numpy ta yfinance
 
 import streamlit as st
