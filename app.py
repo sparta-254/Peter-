@@ -39,11 +39,15 @@ def fetch_data(ticker, period, interval):
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(col).strip() for col in data.columns]
 
+        # Rename columns dynamically
+        column_mapping = {f"{col}_{ticker}": col for col in ["Close", "High", "Low", "Open", "Volume"]}
+        data = data.rename(columns=column_mapping)
+
         # Ensure the required columns exist
         required_columns = ["Close", "High", "Low", "Open", "Volume"]
         for col in required_columns:
             if col not in data.columns:
-                st.error(f"'{col}' column not found in the data. Data columns are: {data.columns}")
+                st.error(f"'{col}' column not found in the data after renaming. Data columns are: {data.columns}")
                 return None
 
         return data
