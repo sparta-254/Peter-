@@ -3,7 +3,6 @@
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import pandas_ta as ta  # For technical indicators
 import yfinance as yf   # For fetching live market data
 
@@ -26,17 +25,15 @@ else:
 @st.cache_data
 def fetch_data(ticker, period, interval):
     try:
-        # Download data
+        st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
         
-        # Check if data is empty
+        # Debug: Check if data is fetched
         if data is None or data.empty:
+            st.warning(f"No data found for {ticker}. The ticker might be invalid or delisted.")
             return None
         
-        # Ensure required column 'Close' exists
-        if "Close" not in data.columns:
-            return None
-        
+        st.write(f"Data fetched successfully: {data.shape} rows")
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -52,7 +49,7 @@ if data is not None:
     # Calculate Indicators
     try:
         if "Close" in data.columns:
-            # Calculate indicators with simple column names
+            # Calculate indicators
             data["SMA"] = ta.sma(data["Close"], length=14)
             data["EMA"] = ta.ema(data["Close"], length=14)
             data["RSI"] = ta.rsi(data["Close"], length=14)
