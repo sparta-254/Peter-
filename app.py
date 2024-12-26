@@ -1,93 +1,74 @@
-# Import required libraries
 import streamlit as st
+import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
-import yfinance as yf
 
-# Streamlit App Configuration
+# App Title
 st.title("Trading Signal Dashboard")
-st.sidebar.header("Settings")
 
 # User Inputs
-ticker = st.sidebar.text_input("Enter Stock/Asset Ticker (e.g., AAPL, BTC-USD)", value="AAPL")
-timeframe = st.sidebar.selectbox("Select Timeframe", ["1m", "5m", "15m", "1h", "1d"])
-indicator = st.sidebar.selectbox("Select Indicator", ["SMA", "EMA", "RSI", "MACD", "Bollinger Bands"])
+ticker = st.text_input("Enter Stock Ticker:", value="AAPL")
+period = st.selectbox("Select Period:", options=["1d", "5d", "1mo", "3mo", "6mo", "1y"], index=1)
+interval = st.selectbox("Select Interval:", options=["1m", "5m", "15m", "1h", "1d"], index=3)
 
-# Adjust period dynamically based on the selected timeframe
-if timeframe == "1m":
-    period = "5d"  # Use 5 days for 1-minute interval
-else:
-    period = "1mo"  # Default to 1 month for other intervals
+# Fetch Data
+try:
+    st.info(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
+    data = yf.download(tickers=ticker, period=period, interval=interval)
+    if data.empty:
+        st.error(f"No data found for {ticker}. Please check the ticker or timeframe.")
+    else:
+        st.success("Data fetched successfully!")
+        
+        # Preprocess Data
+        data.reset_index(inplace=True)
+        data["Datetime"] = data["Datetime"].astype(str)
+        
+        # Add Indicators
+        data["SMA"] = ta.sma(data["Close"], length=14)
+        data["RSI"] = ta.rsi(data["Close"], length=14)
+        macd = ta.macd(data["Close"], fast=12, slow=26, signal=9)
+        data["MACD"] = macd["MACD_12_26_9"]
+        data["Signal_Line"] = macd["MACDs_12_26_9"]
+        
+        # Display Chart
+        st.line_chart(data[["Close", "SMA"]])
+        
+        # Display Processed Data
+        st.subheader("Processed Data")
+        st.dataframe(data[["Datetime", "Close", "High", "Low", "SMA", "RSI", "MACD", "Signal_Line"]])
 
-# Fetch Live Data
-@st.cache_data
-def fetch_data(ticker, period, interval):
-    try:
-        st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
-        data = yf.download(ticker, period=period, interval=interval)
+        # Trading Signals
+        st.subheader("Trading Signals")
+        latest_close = data["Close"].iloc[-1]
+        latest_sma = data["SMA"].iloc[-1]
+        latest_rsi = data["RSI"].iloc[-1]
+        latest_macd = data["MACD"].iloc[-1]
+        latest_signal_line = data["Signal_Line"].iloc[-1]
 
-        # Flatten multi-index columns if they exist
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = ['_'.join(col).strip() for col in data.columns]
-
-        # Ensure 'Close' column exists
-        if f"Close_{ticker}" not in data.columns:
-            st.error(f"'Close' column not found in the data for {ticker}.")
-            return None
-
-        # Rename columns for simplicity
-        data = data.rename(columns={
-            f"Close_{ticker}": "Close",
-            f"High_{ticker}": "High",
-            f"Low_{ticker}": "Low",
-            f"Open_{ticker}": "Open",
-            f"Volume_{ticker}": "Volume"
-        })
-
-        return data
-    except Exception as e:
-        st.error(f"Error fetching data: {e}")
-        return None
-
-# Fetch the data
-data = fetch_data(ticker, period, timeframe)
-
-if data is not None:
-    st.write("Raw Data Sample:")
-    st.dataframe(data.head())
-
-    # Calculate Indicators
-    try:
-        if "Close" in data.columns:
-            # Calculate indicators
-            if indicator == "SMA":
-                data["SMA"] = ta.sma(data["Close"], length=14)
-                st.line_chart(data[["Close", "SMA"]])
-            elif indicator == "EMA":
-                data["EMA"] = ta.ema(data["Close"], length=14)
-                st.line_chart(data[["Close", "EMA"]])
-            elif indicator == "RSI":
-                data["RSI"] = ta.rsi(data["Close"], length=14)
-                st.line_chart(data[["RSI"]])
-            elif indicator == "MACD":
-                macd = ta.macd(data["Close"], fast=12, slow=26, signal=9)
-                if macd is not None:
-                    data["MACD"] = macd["MACD_12_26_9"]
-                    data["Signal"] = macd["MACDs_12_26_9"]
-                    st.line_chart(data[["MACD", "Signal"]])
-            elif indicator == "Bollinger Bands":
-                bollinger = ta.bbands(data["Close"], length=20, std=2.0)
-                if bollinger is not None:
-                    data["Bollinger High"] = bollinger["BBU_20_2.0"]
-                    data["Bollinger Low"] = bollinger["BBL_20_2.0"]
-                    st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
-
-            # Display processed data
-            st.subheader("Processed Data")
-            st.dataframe(data.tail())
+        # SMA Signal
+        if latest_close > latest_sma:
+            st.success(f"Buy Signal: Price ({latest_close}) is above SMA ({latest_sma})")
+        elif latest_close < latest_sma:
+            st.error(f"Sell Signal: Price ({latest_close}) is below SMA ({latest_sma})")
         else:
-            st.error("No 'Close' column found in the data. Unable to calculate indicators.")
-    except Exception as e:
-        st.error(f"Error calculating indicators: {e}")
-else:
-    st.warning("No data available. Please check the ticker or timeframe.")
+            st.info("Neutral Signal: Price equals SMA")
+
+        # RSI Signal
+        if latest_rsi < 30:
+            st.success(f"RSI ({latest_rsi}): Oversold - Buy Signal")
+        elif latest_rsi > 70:
+            st.error(f"RSI ({latest_rsi}): Overbought - Sell Signal")
+        else:
+            st.info(f"RSI ({latest_rsi}): Neutral")
+
+        # MACD Signal
+        if latest_macd > latest_signal_line:
+            st.success(f"MACD: Bullish Crossover - Buy Signal")
+        elif latest_macd < latest_signal_line:
+            st.error(f"MACD: Bearish Crossover - Sell Signal")
+        else:
+            st.info("MACD: Neutral")
+
+except Exception as e:
+    st.error(f"Error calculating indicators: {e}")
