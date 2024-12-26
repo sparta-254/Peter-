@@ -30,7 +30,11 @@ def fetch_data(ticker, period, interval):
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
 
-        # Ensure 'Close' column exists
+        # Flatten multi-index columns if they exist
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = ['_'.join(col).strip() for col in data.columns]
+
+        # Ensure 'Close' column exists and rename columns
         if "Close" not in data.columns:
             st.error("'Close' column not found in the data.")
             return None
