@@ -21,14 +21,23 @@ indicator = st.sidebar.selectbox("Select Indicator", ["SMA", "EMA", "RSI", "MACD
 def fetch_data(ticker, period="1mo", interval="1d"):
     try:
         data = yf.download(ticker, period=period, interval=interval)
+        if data.empty:
+            return None
         data["SMA"] = ta.sma(data["Close"], length=14)
         data["EMA"] = ta.ema(data["Close"], length=14)
         data["RSI"] = ta.rsi(data["Close"], length=14)
         macd = ta.macd(data["Close"])
-        data["MACD"] = macd["MACD_12_26_9"]
-        data["Signal"] = macd["MACDs_12_26_9"]
-        data["Bollinger High"] = ta.bbands(data["Close"])["BBU_20_2.0"]
-        data["Bollinger Low"] = ta.bbands(data["Close"])["BBL_20_2.0"]
+        if macd is not None:
+            data["MACD"] = macd["MACD_12_26_9"]
+            data["Signal"] = macd["MACDs_12_26_9"]
+        else:
+            data["MACD"], data["Signal"] = np.nan, np.nan
+        bollinger = ta.bbands(data["Close"])
+        if bollinger is not None:
+            data["Bollinger High"] = bollinger["BBU_20_2.0"]
+            data["Bollinger Low"] = bollinger["BBL_20_2.0"]
+        else:
+            data["Bollinger High"], data["Bollinger Low"] = np.nan, np.nan
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
