@@ -1,5 +1,5 @@
 # Install required libraries
-# pip install streamlit pandas numpy ta yfinance
+# pip install streamlit pandas numpy pandas_ta yfinance
 
 import streamlit as st
 import pandas as pd
@@ -27,8 +27,11 @@ def fetch_data(ticker, period, interval):
     try:
         st.write(f"Fetching data for {ticker} with period '{period}' and interval '{interval}'...")
         data = yf.download(ticker, period=period, interval=interval)
+        
+        # Reset index to flatten multi-index if necessary
+        data = data.reset_index()
 
-        # Ensure the "Close" column is correctly labeled and available
+        # Ensure the "Close" column exists
         if "Close" not in data.columns:
             st.error("No 'Close' column in the data. Unable to calculate indicators.")
             return None
