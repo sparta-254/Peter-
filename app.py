@@ -1,12 +1,11 @@
-import numpy as np
-print(f"Numpy version: {np.__version__}")# Install required libraries
+# Install required libraries
 # pip install streamlit pandas numpy ta yfinance
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pandas_ta as ta # For technical indicators
-import yfinance as yf  # For fetching live market data
+import pandas_ta as ta  # For technical indicators
+import yfinance as yf   # For fetching live market data
 
 # Streamlit App Configuration
 st.title("Trading Signal Dashboard")
@@ -18,18 +17,18 @@ timeframe = st.sidebar.selectbox("Select Timeframe", ["1m", "5m", "15m", "1h", "
 indicator = st.sidebar.selectbox("Select Indicator", ["SMA", "EMA", "RSI", "MACD", "Bollinger Bands"])
 
 # Fetch Live Data
-@st.cache
+@st.cache_data
 def fetch_data(ticker, period="1mo", interval="1d"):
     try:
         data = yf.download(ticker, period=period, interval=interval)
-        data["SMA"] = ta.trend.sma_indicator(data["Close"], window=14)
-        data["EMA"] = ta.trend.ema_indicator(data["Close"], window=14)
-        data["RSI"] = ta.momentum.rsi(data["Close"], window=14)
-        macd = ta.trend.MACD(data["Close"])
-        data["MACD"] = macd.macd()
-        data["Signal"] = macd.macd_signal()
-        data["Bollinger High"] = ta.volatility.bollinger_hband(data["Close"])
-        data["Bollinger Low"] = ta.volatility.bollinger_lband(data["Close"])
+        data["SMA"] = ta.sma(data["Close"], length=14)
+        data["EMA"] = ta.ema(data["Close"], length=14)
+        data["RSI"] = ta.rsi(data["Close"], length=14)
+        macd = ta.macd(data["Close"])
+        data["MACD"] = macd["MACD_12_26_9"]
+        data["Signal"] = macd["MACDs_12_26_9"]
+        data["Bollinger High"] = ta.bbands(data["Close"])["BBU_20_2.0"]
+        data["Bollinger Low"] = ta.bbands(data["Close"])["BBL_20_2.0"]
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
