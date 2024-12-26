@@ -16,35 +16,49 @@ ticker = st.sidebar.text_input("Enter Stock/Asset Ticker (e.g., AAPL, BTC-USD)",
 timeframe = st.sidebar.selectbox("Select Timeframe", ["1m", "5m", "15m", "1h", "1d"])
 indicator = st.sidebar.selectbox("Select Indicator", ["SMA", "EMA", "RSI", "MACD", "Bollinger Bands"])
 
+# Adjust period based on the selected timeframe
+if timeframe == "1m":
+    period = "7d"  # Limit to 7 days for 1-minute data
+else:
+    period = "1mo"  # Default to 1 month for other intervals
+
 # Fetch Live Data
 @st.cache_data
-def fetch_data(ticker, period="1mo", interval="1d"):
+def fetch_data(ticker, period, interval):
     try:
+        # Download data
         data = yf.download(ticker, period=period, interval=interval)
         if data.empty:
+            st.warning(f"No data found for {ticker}. The ticker might be invalid or delisted.")
             return None
+        # Calculate indicators
         data["SMA"] = ta.sma(data["Close"], length=14)
         data["EMA"] = ta.ema(data["Close"], length=14)
         data["RSI"] = ta.rsi(data["Close"], length=14)
+        
         macd = ta.macd(data["Close"])
         if macd is not None:
             data["MACD"] = macd["MACD_12_26_9"]
             data["Signal"] = macd["MACDs_12_26_9"]
         else:
             data["MACD"], data["Signal"] = np.nan, np.nan
+        
         bollinger = ta.bbands(data["Close"])
         if bollinger is not None:
             data["Bollinger High"] = bollinger["BBU_20_2.0"]
             data["Bollinger Low"] = bollinger["BBL_20_2.0"]
         else:
             data["Bollinger High"], data["Bollinger Low"] = np.nan, np.nan
+        
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
 
-data = fetch_data(ticker, period="1mo", interval=timeframe)
+# Fetch the data
+data = fetch_data(ticker, period, timeframe)
 
+# Display Data and Charts
 if data is not None:
     st.subheader(f"Price Data for {ticker}")
     st.dataframe(data.tail())
