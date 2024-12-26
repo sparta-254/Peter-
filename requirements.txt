@@ -1,5 +1,6 @@
-pandas_ta==0.3.14b0
-pandas==1.5.3
-streamlit==1.25.0
-yfinance==0.2.30
-setuptools>=67.0.0
+streamlit
+pandas
+numpy
+yfinance
+pandas-ta
+setuptools
