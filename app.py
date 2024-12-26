@@ -30,13 +30,11 @@ def fetch_data(ticker, period, interval):
         data = yf.download(ticker, period=period, interval=interval)
         
         # Check if data is empty
-        if data.empty:
-            st.warning(f"No data found for {ticker}. The ticker might be invalid or delisted.")
+        if data is None or data.empty:
             return None
         
         # Ensure required column 'Close' exists
         if "Close" not in data.columns:
-            st.error(f"Data for {ticker} does not contain 'Close' prices.")
             return None
         
         return data
@@ -69,45 +67,44 @@ if data is not None:
             data["Bollinger High"] = bollinger["BBU_20_2.0"]
             data["Bollinger Low"] = bollinger["BBL_20_2.0"]
 
+            # Display Data
+            st.subheader(f"Price Data for {ticker}")
+            st.dataframe(data.tail())
+
+            # Plot Selected Indicator
+            st.subheader(f"{indicator} Indicator Chart")
+            if indicator == "SMA":
+                st.line_chart(data[["Close", "SMA"]])
+            elif indicator == "EMA":
+                st.line_chart(data[["Close", "EMA"]])
+            elif indicator == "RSI":
+                st.line_chart(data[["RSI"]])
+            elif indicator == "MACD":
+                st.line_chart(data[["MACD", "Signal"]])
+            elif indicator == "Bollinger Bands":
+                st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
+
+            # Signal Output
+            st.subheader("Trading Signals")
+            if indicator == "RSI":
+                latest_rsi = data["RSI"].iloc[-1]
+                if latest_rsi < 30:
+                    st.success("Buy Signal (Oversold)")
+                elif latest_rsi > 70:
+                    st.error("Sell Signal (Overbought)")
+                else:
+                    st.info("Neutral Signal")
+            elif indicator == "MACD":
+                latest_macd = data["MACD"].iloc[-1]
+                latest_signal = data["Signal"].iloc[-1]
+                if latest_macd > latest_signal:
+                    st.success("Buy Signal (MACD > Signal Line)")
+                else:
+                    st.error("Sell Signal (MACD < Signal Line)")
+            else:
+                st.info("Signal generation only available for RSI and MACD.")
         else:
             st.error("No 'Close' column found in data. Unable to calculate indicators.")
-
-        # Display Data
-        st.subheader(f"Price Data for {ticker}")
-        st.dataframe(data.tail())
-
-        # Plot Selected Indicator
-        st.subheader(f"{indicator} Indicator Chart")
-        if indicator == "SMA":
-            st.line_chart(data[["Close", "SMA"]])
-        elif indicator == "EMA":
-            st.line_chart(data[["Close", "EMA"]])
-        elif indicator == "RSI":
-            st.line_chart(data[["RSI"]])
-        elif indicator == "MACD":
-            st.line_chart(data[["MACD", "Signal"]])
-        elif indicator == "Bollinger Bands":
-            st.line_chart(data[["Close", "Bollinger High", "Bollinger Low"]])
-
-        # Signal Output
-        st.subheader("Trading Signals")
-        if indicator == "RSI":
-            latest_rsi = data["RSI"].iloc[-1]
-            if latest_rsi < 30:
-                st.success("Buy Signal (Oversold)")
-            elif latest_rsi > 70:
-                st.error("Sell Signal (Overbought)")
-            else:
-                st.info("Neutral Signal")
-        elif indicator == "MACD":
-            latest_macd = data["MACD"].iloc[-1]
-            latest_signal = data["Signal"].iloc[-1]
-            if latest_macd > latest_signal:
-                st.success("Buy Signal (MACD > Signal Line)")
-            else:
-                st.error("Sell Signal (MACD < Signal Line)")
-        else:
-            st.info("Signal generation only available for RSI and MACD.")
     except Exception as e:
         st.error(f"Error calculating indicators: {e}")
 else:
