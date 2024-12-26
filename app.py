@@ -54,23 +54,21 @@ if data is not None:
     # Calculate Indicators
     try:
         if "Close" in data.columns:
+            # Calculate indicators with simple column names
             data["SMA"] = ta.sma(data["Close"], length=14)
             data["EMA"] = ta.ema(data["Close"], length=14)
             data["RSI"] = ta.rsi(data["Close"], length=14)
 
-            macd = ta.macd(data["Close"])
-            if macd is not None:
-                data["MACD"] = macd["MACD_12_26_9"]
-                data["Signal"] = macd["MACDs_12_26_9"]
-            else:
-                data["MACD"], data["Signal"] = np.nan, np.nan
+            # MACD
+            macd = ta.macd(data["Close"], fast=12, slow=26, signal=9)
+            data["MACD"] = macd["MACD_12_26_9"]
+            data["Signal"] = macd["MACDs_12_26_9"]
 
-            bollinger = ta.bbands(data["Close"])
-            if bollinger is not None:
-                data["Bollinger High"] = bollinger["BBU_20_2.0"]
-                data["Bollinger Low"] = bollinger["BBL_20_2.0"]
-            else:
-                data["Bollinger High"], data["Bollinger Low"] = np.nan, np.nan
+            # Bollinger Bands
+            bollinger = ta.bbands(data["Close"], length=20, std=2.0)
+            data["Bollinger High"] = bollinger["BBU_20_2.0"]
+            data["Bollinger Low"] = bollinger["BBL_20_2.0"]
+
         else:
             st.error("No 'Close' column found in data. Unable to calculate indicators.")
 
