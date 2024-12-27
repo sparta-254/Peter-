@@ -19,12 +19,13 @@ def fetch_data(ticker, period, interval):
         
         data = yf.download(ticker, period=period, interval=interval)
         
-        # Flatten MultiIndex columns and ensure unique column names
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = ['_'.join(col).strip() for col in data.columns]
-        data.columns = pd.io.parsers.ParserBase({'names': data.columns})._maybe_dedup_names(data.columns)
+        # Remove duplicate column names by appending a unique suffix
+        data.columns = pd.Index([f"{col}_{i}" if data.columns.duplicated()[i] else col 
+                                 for i, col in enumerate(data.columns)])
         
-        data = data.rename(columns=lambda x: x.split("_")[-1])  # Standardize column names
+        # Standardize column names to remove suffixes for easier reference
+        data.rename(columns=lambda x: x.split("_")[0], inplace=True)
+        
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -54,16 +55,15 @@ def generate_signals(data):
     elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
         signals.append("SELL (SMA Death Cross)")
 
-    # Add Stochastic Oscillator Signal (if data has High/Low/Close)
-    if "High" in data.columns and "Low" in data.columns and "Close" in data.columns:
-        stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
-        if stoch is not None:
-            data["Stoch_K"] = stoch["STOCHk_14_3_3"]
-            data["Stoch_D"] = stoch["STOCHd_14_3_3"]
-            if data["Stoch_K"].iloc[-1] > 80:
-                signals.append("SELL (Stochastic Overbought)")
-            elif data["Stoch_K"].iloc[-1] < 20:
-                signals.append("BUY (Stochastic Oversold)")
+    # Add Stochastic Oscillator Signal
+    stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
+    if stoch is not None:
+        data["Stoch_K"] = stoch["STOCHk_14_3_3"]
+        data["Stoch_D"] = stoch["STOCHd_14_3_3"]
+        if data["Stoch_K"].iloc[-1] > 80:
+            signals.append("SELL (Stochastic Overbought)")
+        elif data["Stoch_K"].iloc[-1] < 20:
+            signals.append("BUY (Stochastic Oversold)")
 
     return signals
 
