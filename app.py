@@ -6,8 +6,8 @@ import time
 from telegram import Bot
 
 # Telegram Bot API Setup
-TELEGRAM_API_KEY = "YOUR_TELEGRAM_BOT_API_KEY"  # Replace with your Telegram bot API key
-TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # Replace with your Telegram chat ID
+TELEGRAM_API_KEY = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
+TELEGRAM_CHAT_ID = "6891630125"
 
 # Alpha Vantage API Setup
 ALPHA_VANTAGE_API_KEY = "WYVEU8GX06DICZD4"
