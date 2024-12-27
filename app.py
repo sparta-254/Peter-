@@ -12,26 +12,18 @@ TELEGRAM_CHAT_ID = "6891630125"
 # Function to Fetch Data
 def fetch_data(ticker, period, interval):
     try:
-        # Fetch data using yfinance
         data = yf.download(ticker, period=period, interval=interval)
 
-        # Debug: Display original column structure
-        st.write("Fetched data columns (raw):", data.columns)
-
-        # Flatten MultiIndex columns if present
+        # Flatten MultiIndex columns (if any) and handle duplicate column names
         if isinstance(data.columns, pd.MultiIndex):
-            data.columns = [col[0] for col in data.columns]  # Keep only the first level
-
-        # Debug: Display updated column structure
-        st.write("Fetched data columns (flattened):", data.columns)
-
-        # Ensure required columns exist
-        required_columns = ["High", "Low", "Close"]
-        missing_columns = [col for col in required_columns if col not in data.columns]
-        if missing_columns:
-            st.error(f"Missing required columns: {missing_columns}")
-            return None
-
+            data.columns = ['_'.join(col).strip() for col in data.columns]
+        else:
+            data.columns = [col if col not in data.columns[:i] else f"{col}_{i}" 
+                            for i, col in enumerate(data.columns)]
+        
+        # Rename columns to standard format
+        data.columns = [col.split("_")[0] for col in data.columns]
+        
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
@@ -56,10 +48,16 @@ def generate_signals(data):
     # Add SMA Signal
     data["SMA_50"] = ta.sma(data["Close"], length=50)
     data["SMA_200"] = ta.sma(data["Close"], length=200)
-    if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
-        signals.append("BUY (SMA Golden Cross)")
-    elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
-        signals.append("SELL (SMA Death Cross)")
+    
+    # Handle NaN/None values in SMA columns
+    if data["SMA_50"].isnull().any() or data["SMA_200"].isnull().any():
+        st.warning("Insufficient data to calculate SMA indicators. Signals may be incomplete.")
+    else:
+        # Compare SMA values only if they are valid
+        if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
+            signals.append("BUY (SMA Golden Cross)")
+        elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
+            signals.append("SELL (SMA Death Cross)")
 
     # Add Stochastic Oscillator Signal
     stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
@@ -96,6 +94,7 @@ def main():
     data = fetch_data(ticker, period, interval)
 
     if data is not None:
+        st.write(f"Fetched data columns:\n{data.columns.tolist()}")
         st.write(f"Data for {ticker}:")
         st.write(data.head())  # Display data safely
 
