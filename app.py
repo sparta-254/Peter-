@@ -2,12 +2,10 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import pytz
-import time
 from telegram import Bot
 
 # Telegram Bot API Setup
-TELEGRAM_API_KEY =
-"7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
+TELEGRAM_API_KEY = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
 TELEGRAM_CHAT_ID = "6891630125"
 
 # Alpha Vantage API Setup
@@ -20,7 +18,7 @@ SESSIONS = {
     "Night": {"start_time": "18:25", "emoji": "🌙"},
     "Overnight": {"start_time": "00:25", "emoji": "🌑"},
 }
-TICKERS = ["USD", "JPY"]  # Example for USD/JPY
+TICKERS = [{"from": "USD", "to": "JPY"}]  # Example for USD/JPY
 SIGNALS_PER_SESSION = 4
 TIME_INTERVAL = "5min"  # Alpha Vantage interval (1min, 5min, etc.)
 EXPIRATION = 5  # Expiration time in minutes
@@ -98,7 +96,9 @@ def main():
             signals_sent = 0
 
             for _ in range(SIGNALS_PER_SESSION):
-                for from_symbol, to_symbol in zip(TICKERS[:-1], TICKERS[1:]):
+                for ticker in TICKERS:
+                    from_symbol = ticker["from"]
+                    to_symbol = ticker["to"]
                     data = fetch_forex_data(from_symbol, to_symbol, interval=TIME_INTERVAL)
                     if data.empty:
                         print(f"No data available for {from_symbol}/{to_symbol}")
