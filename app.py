@@ -1,114 +1,115 @@
-import streamlit as st
-import pandas as pd
-import pandas_ta as ta
-from datetime import datetime, timedelta
 import requests
+import pandas as pd
+from datetime import datetime, timedelta
+import pytz
+import time
+from telegram import Bot
 
-# Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
-TELEGRAM_CHAT_ID = "6891630125"
+# Telegram Bot API Setup
+TELEGRAM_API_KEY = "YOUR_TELEGRAM_BOT_API_KEY"  # Replace with your Telegram bot API key
+TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # Replace with your Telegram chat ID
 
-# Market Sessions (UTC-4)
+# Alpha Vantage API Setup
+ALPHA_VANTAGE_API_KEY = "WYVEU8GX06DICZD4"
+
+# Signal Configuration
 SESSIONS = {
-    "Morning Session 🌤️": {"start": "06:25", "interval": 60, "signals": 4},
-    "Afternoon Session ☀️": {"start": "12:25", "interval": 60, "signals": 4},
-    "Night Session 🌙": {"start": "18:25", "interval": 60, "signals": 4},
-    "Overnight Session 🌑": {"start": "00:25", "interval": 60, "signals": 4},
+    "Morning": {"start_time": "06:25", "emoji": "🌤️"},
+    "Afternoon": {"start_time": "12:25", "emoji": "☀️"},
+    "Night": {"start_time": "18:25", "emoji": "🌙"},
+    "Overnight": {"start_time": "00:25", "emoji": "🌑"},
 }
+TICKERS = ["USD", "JPY"]  # Example for USD/JPY
+SIGNALS_PER_SESSION = 4
+TIME_INTERVAL = "5min"  # Alpha Vantage interval (1min, 5min, etc.)
+EXPIRATION = 5  # Expiration time in minutes
+UTC_OFFSET = -4  # Adjust for UTC-4 timezone
 
-# Function to fetch market data
-def fetch_data(ticker, period="5d", interval="5m"):
+# Fetch Forex Data
+def fetch_forex_data(from_symbol, to_symbol, interval="5min"):
     try:
-        url = f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1=0&period2=9999999999&interval={interval}&events=history"
-        data = pd.read_csv(url)
-        data.rename(columns={"Adj Close": "Close"}, inplace=True)
-        return data
+        url = (
+            f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol={from_symbol}"
+            f"&to_symbol={to_symbol}&interval={interval}&apikey={ALPHA_VANTAGE_API_KEY}"
+        )
+        response = requests.get(url)
+        data = response.json()
+        if "Time Series FX (5min)" in data:
+            df = pd.DataFrame.from_dict(data["Time Series FX (5min)"], orient="index")
+            df.columns = ["Open", "High", "Low", "Close"]
+            df = df.astype(float)
+            df.index = pd.to_datetime(df.index)
+            return df
+        else:
+            print(f"Error fetching data: {data.get('Error Message', 'Unknown error')}")
+            return pd.DataFrame()
     except Exception as e:
-        st.warning(f"Error fetching data for {ticker}: {e}")
+        print(f"Error fetching data for {from_symbol}/{to_symbol}: {e}")
         return pd.DataFrame()
 
-# Function to generate trading signals
-def generate_signals(data):
-    signals = []
-    if len(data) < 15:
-        st.warning("Not enough data for generating signals.")
-        return signals
-
+# Generate Signal
+def generate_signal(data):
     try:
-        # Calculate RSI
-        data["RSI"] = ta.rsi(data["Close"], length=14)
+        data["RSI"] = (
+            100
+            - (100 / (1 + (data["Close"].pct_change().rolling(14).mean() / data["Close"].pct_change().rolling(14).std())))
+        )
         if data["RSI"].iloc[-1] > 70:
-            signals.append("SELL (RSI Overbought)")
+            return "SELL"
         elif data["RSI"].iloc[-1] < 30:
-            signals.append("BUY (RSI Oversold)")
-
-        # Calculate SMA Crossovers
-        data["SMA_50"] = ta.sma(data["Close"], length=50)
-        data["SMA_200"] = ta.sma(data["Close"], length=200)
-        if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
-            signals.append("BUY (SMA Golden Cross)")
-        elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
-            signals.append("SELL (SMA Death Cross)")
+            return "BUY"
+        return None
     except Exception as e:
-        st.warning(f"Error generating signals: {e}")
+        print(f"Error generating signal: {e}")
+        return None
 
-    return signals
-
-# Function to send signals to Telegram
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
-    try:
-        response = requests.post(url, json=payload)
-        if response.status_code == 200:
-            st.success("Signal sent to Telegram.")
-        else:
-            st.error(f"Failed to send signal: {response.text}")
-    except Exception as e:
-        st.error(f"Error sending signal to Telegram: {e}")
-
-# Generate session signals
-def generate_session_signals(session_name, start_time, interval, signals_per_session):
-    utc_offset = -4
-    current_time = datetime.utcnow() + timedelta(hours=utc_offset)
-    session_start = datetime.strptime(start_time, "%H:%M").replace(
-        year=current_time.year, month=current_time.month, day=current_time.day
+# Send Signal to Telegram
+def send_telegram_signal(session_name, session_emoji, signal, from_symbol, to_symbol, time_now):
+    bot = Bot(token=TELEGRAM_API_KEY)
+    expiration_time = time_now + timedelta(minutes=EXPIRATION)
+    martingale_times = [
+        (time_now + timedelta(minutes=EXPIRATION * i)).strftime("%H:%M") for i in range(1, 3)
+    ]
+    message = (
+        f"{session_emoji} {session_name.upper()} SESSION\n"
+        f"🗓 {datetime.now().strftime('%A, %B %d, %Y')}\n"
+        f"🇺🇸 {from_symbol}/{to_symbol} 🇯🇵 OTC\n"
+        f"🕘 Expiration {EXPIRATION}M\n"
+        f"⏺ Entry at {time_now.strftime('%H:%M')}\n"
+        f"🟥 {signal} 🟩\n\n"
+        f"🔽 Martingale levels\n"
+        f"1️⃣ level at {martingale_times[0]}\n"
+        f"2️⃣ level at {martingale_times[1]}"
     )
-
-    if current_time >= session_start:
-        st.write(f"Generating signals for {session_name}...")
-        for i in range(signals_per_session):
-            signal_time = session_start + timedelta(minutes=i * interval)
-            if current_time >= signal_time:
-                ticker = "USD/JPY=X"  # Example ticker, replace with your desired symbol
-                data = fetch_data(ticker)
-                signals = generate_signals(data)
-                if signals:
-                    signal_message = f"""
-{session_name}
-🗓 Date: {current_time.strftime('%A, %B %d, %Y')}
-🇺🇸 USD/JPY OTC
-🕘 Expiration 5M
-⏺ Entry at {signal_time.strftime('%H:%M')}
-🟥 {signals[0]} 🟩
-🔽 Martingale levels
-1️⃣ level at {(signal_time + timedelta(minutes=5)).strftime('%H:%M')}
-2️⃣ level at {(signal_time + timedelta(minutes=10)).strftime('%H:%M')}
-"""
-                    send_telegram_message(signal_message)
+    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
 
 # Main Function
 def main():
-    st.title("Trading Signal Generator")
+    # Adjust to UTC-4 timezone
+    tz = pytz.timezone("Etc/GMT" + str(UTC_OFFSET))
+    now = datetime.now(tz)
 
-    # Iterate through sessions
     for session_name, session_info in SESSIONS.items():
-        generate_session_signals(
-            session_name,
-            session_info["start"],
-            session_info["interval"],
-            session_info["signals"],
-        )
+        session_start = now.replace(hour=int(session_info["start_time"].split(":")[0]), 
+                                     minute=int(session_info["start_time"].split(":")[1]), second=0)
+        if now >= session_start and (now - session_start).seconds < 3600:  # Check session timing
+            print(f"Generating signals for {session_name} Session {session_info['emoji']}...")
+            signals_sent = 0
+
+            for _ in range(SIGNALS_PER_SESSION):
+                for from_symbol, to_symbol in zip(TICKERS[:-1], TICKERS[1:]):
+                    data = fetch_forex_data(from_symbol, to_symbol, interval=TIME_INTERVAL)
+                    if data.empty:
+                        print(f"No data available for {from_symbol}/{to_symbol}")
+                        continue
+
+                    signal = generate_signal(data)
+                    if signal:
+                        send_telegram_signal(session_name, session_info["emoji"], signal, from_symbol, to_symbol, now)
+                        signals_sent += 1
+                        time.sleep(60 * EXPIRATION)  # Wait before sending the next signal
+                if signals_sent >= SIGNALS_PER_SESSION:
+                    break
 
 if __name__ == "__main__":
     main()
