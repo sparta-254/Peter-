@@ -1,40 +1,65 @@
+# Import Libraries
 import streamlit as st
 import pandas as pd
 import pandas_ta as ta
 import yfinance as yf
-import time
-from datetime import datetime, timedelta
 import requests
+import time
+from datetime import datetime
 
-# Telegram Bot Config
+# Telegram Bot Settings
 TELEGRAM_BOT_TOKEN = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
 TELEGRAM_CHAT_ID = "6891630125"
 
 # Trading Sessions
-sessions = {
-    "Morning": (6, 12),
-    "Afternoon": (12, 18),
-    "Night": (18, 24),
-    "OverNight": (0, 6)
+SESSIONS = {
+    "Morning": {"start": 6, "end": 12},
+    "Afternoon": {"start": 12, "end": 18},
+    "Night": {"start": 18, "end": 24},
+    "Overnight": {"start": 0, "end": 6},
 }
 
 # Fetch Data Function
 def fetch_data(ticker, period, interval):
     try:
         data = yf.download(ticker, period=period, interval=interval)
+
+        # Flatten multi-index columns, if present
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(col).strip() for col in data.columns]
+
+        # Rename columns for compatibility
+        for col in data.columns:
+            if "Close" in col:
+                data = data.rename(columns={col: "Close"})
+            elif "High" in col:
+                data = data.rename(columns={col: "High"})
+            elif "Low" in col:
+                data = data.rename(columns={col: "Low"})
+            elif "Open" in col:
+                data = data.rename(columns={col: "Open"})
+            elif "Volume" in col:
+                data = data.rename(columns={col: "Volume"})
+
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
 
-# Generate Signals Function
+# Signal Generation Function
 def generate_signal(data):
-    data["RSI"] = ta.rsi(data["Close"], length=14)
-    data["SMA"] = ta.sma(data["Close"], length=14)
-    signal = None
+    # Ensure 'Close' column exists
+    close_column = [col for col in data.columns if 'Close' in col]
+    if not close_column:
+        raise KeyError("'Close' column not found in the data.")
+    close_column = close_column[0]
 
+    # Calculate indicators
+    data["RSI"] = ta.rsi(data[close_column], length=14)
+    data["SMA"] = ta.sma(data[close_column], length=14)
+
+    # Generate buy/sell signals based on RSI
+    signal = None
     if data["RSI"].iloc[-1] > 70:
         signal = "SELL"
     elif data["RSI"].iloc[-1] < 30:
@@ -42,60 +67,55 @@ def generate_signal(data):
 
     return signal
 
-# Telegram Message Sender
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
+# Send Signal to Telegram
+def send_telegram_signal(ticker, signal, session, timeframe, expiration_time):
     try:
-        requests.post(url, data=payload)
+        message = (
+            f"🔔 **Trading Signal** 🔔\n"
+            f"📈 Ticker: {ticker}\n"
+            f"🕒 Session: {session}\n"
+            f"📉 Signal: {signal}\n"
+            f"⏳ Timeframe: {timeframe}\n"
+            f"📅 Expiration: {expiration_time} mins\n"
+        )
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
+        response = requests.post(url, data=payload)
+        if response.status_code == 200:
+            st.write("Signal sent to Telegram!")
+        else:
+            st.error("Failed to send signal to Telegram.")
     except Exception as e:
-        st.error(f"Error sending message: {e}")
+        st.error(f"Error sending Telegram message: {e}")
 
-# Determine Current Session
-def get_current_session():
-    now = datetime.now()
-    for session, (start_hour, end_hour) in sessions.items():
-        start = now.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-        end = now.replace(hour=end_hour, minute=0, second=0, microsecond=0)
-        if start <= now < end:
-            return session
-    return None
+# Main Application
+def main():
+    st.title("Trading Signal Dashboard")
 
-# Main Logic
-tickers = ["EURJPY=X", "USDJPY=X"]  # Add more currency pairs or OTC tickers
-session_signals = {session: [] for session in sessions.keys()}
+    # User Inputs
+    ticker = st.sidebar.text_input("Enter Stock/Asset Ticker (e.g., AAPL, BTC-USD, EURJPY=X)", value="AAPL")
+    timeframe = st.sidebar.selectbox("Select Timeframe", ["1m", "5m", "15m", "1h", "1d"])
+    period = "5d" if timeframe in ["1m", "5m"] else "1mo"
 
-while True:
-    current_session = get_current_session()
-    if current_session:
-        for ticker in tickers:
-            data = fetch_data(ticker, "5d", "1m")
-            if data is not None:
+    # Fetch Data
+    st.write(f"Fetching data for {ticker} with period '{period}' and interval '{timeframe}'...")
+    data = fetch_data(ticker, period, timeframe)
+
+    if data is not None:
+        st.write("Data Sample:")
+        st.dataframe(data.head())
+
+        # Generate Signals for Each Session
+        current_hour = datetime.utcnow().hour
+        for session, times in SESSIONS.items():
+            if times["start"] <= current_hour < times["end"]:
                 signal = generate_signal(data)
                 if signal:
-                    # Generate signal details
-                    expiration = datetime.now() + timedelta(minutes=5)
-                    martingale1 = expiration + timedelta(minutes=5)
-                    martingale2 = martingale1 + timedelta(minutes=5)
+                    send_telegram_signal(ticker, signal, session, timeframe, expiration_time=5)
+                    st.write(f"Signal for {session}: {signal}")
+    else:
+        st.warning("No data available. Please check the ticker or timeframe.")
 
-                    message = f"""
-{ticker}
-
-OTC
-
-Expiration 5M
-
-Entry at {datetime.now().strftime('%H:%M')}
-
-{signal}
-
-Martingale levels
-1 level at {martingale1.strftime('%H:%M')}
-2 level at {martingale2.strftime('%H:%M')}
-"""
-
-                    # Check for duplicate signals
-                    if len(session_signals[current_session]) < 7 and message not in session_signals[current_session]:
-                        session_signals[current_session].append(message)
-                        send_telegram_message(message)
-    time.sleep(300)  # Sleep for 5 minutes before fetching again
+# Run the Application
+if __name__ == "__main__":
+    main()
