@@ -13,6 +13,10 @@ TELEGRAM_CHAT_ID = "6891630125"
 # Function to Fetch Data
 def fetch_data(ticker, period, interval):
     try:
+        # Adjust ticker format for Forex pairs if necessary
+        if ticker.upper() in ["USD/JPY", "EUR/USD", "GBP/USD"]:
+            ticker = ticker.replace("/", "") + "=X"
+        
         data = yf.download(ticker, period=period, interval=interval)
         
         # Flatten MultiIndex columns and ensure unique column names
@@ -64,7 +68,7 @@ def generate_signals(data):
     return signals
 
 # Function to Format and Send Signals
-def send_telegram_signal(session, ticker, signals, session_start_time):
+def send_telegram_signal(session, emoji, ticker, signals, session_start_time):
     try:
         for signal in signals:
             expiration_time = session_start_time + timedelta(minutes=5)
@@ -72,7 +76,7 @@ def send_telegram_signal(session, ticker, signals, session_start_time):
             level2_time = level1_time + timedelta(minutes=5)
             
             message = (
-                f"🌤️ {session.upper()} SESSION\n"
+                f"{emoji} {session.upper()} SESSION\n"
                 f"🟢 STARTED\n"
                 f"🗓 {datetime.now().strftime('%A, %B %d, %Y')}\n"
                 f"🇺🇸 {ticker} OTC\n"
@@ -95,10 +99,10 @@ def main():
     
     # Session Times (UTC-4)
     session_schedule = {
-        "MORNING": "06:25",
-        "AFTERNOON": "12:25",
-        "NIGHT": "18:25",
-        "OVERNIGHT": "00:25",
+        "morning": ("06:25", "🌤"),
+        "afternoon": ("12:25", "☀️"),
+        "night": ("18:25", "🌙"),
+        "overnight": ("00:25", "🌑"),
     }
     
     # User Inputs
@@ -114,7 +118,7 @@ def main():
         st.write(f"Data for {ticker}:")
         st.dataframe(data.head())
 
-        for session, start_time in session_schedule.items():
+        for session, (start_time, emoji) in session_schedule.items():
             signals = generate_signals(data)
             
             # Convert session start time to datetime
@@ -123,10 +127,10 @@ def main():
             )
             
             if signals:
-                send_telegram_signal(session, ticker, signals[:4], session_start_time)
-                st.success(f"{session} Signals sent to Telegram.")
+                send_telegram_signal(session, emoji, ticker, signals[:4], session_start_time)
+                st.success(f"{session.capitalize()} signals sent to Telegram.")
             else:
-                st.warning(f"No signals generated for {session} session.")
+                st.warning(f"No signals generated for {session.capitalize()} session.")
     else:
         st.warning("No data available. Please check the ticker or timeframe.")
 
