@@ -1,116 +1,109 @@
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import pytz
+from pytz import timezone
 from telegram import Bot
+import time
 
-# Telegram Bot API Setup
-TELEGRAM_API_KEY = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
-TELEGRAM_CHAT_ID = "6891630125"
+# Set your API key and chat details
+ALPHA_API_KEY = "WYVEU8GX06DICZD4"  # Alpha Vantage API Key
+API_KEY = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"  # Telegram Bot API Key
+CHAT_ID = "6891630125"  # Telegram Chat ID
 
-# Alpha Vantage API Setup
-ALPHA_VANTAGE_API_KEY = "WYVEU8GX06DICZD4"
+# Telegram Bot setup
+bot = Bot(token=API_KEY)
 
-# Signal Configuration
+# Timezone and sessions setup
+EST = timezone("US/Eastern")
 SESSIONS = {
-    "Morning": {"start_time": "06:25", "emoji": "🌤️"},
-    "Afternoon": {"start_time": "12:25", "emoji": "☀️"},
-    "Night": {"start_time": "18:25", "emoji": "🌙"},
-    "Overnight": {"start_time": "00:25", "emoji": "🌑"},
+    "Morning Session 🌤️": {"start": 6, "end": 12},
+    "Afternoon Session ☀️": {"start": 12, "end": 18},
+    "Night Session 🌙": {"start": 18, "end": 24},
+    "Overnight Session 🌑": {"start": 0, "end": 6},
 }
-TICKERS = [{"from": "USD", "to": "JPY"}]  # Example for USD/JPY
-SIGNALS_PER_SESSION = 4
-TIME_INTERVAL = "5min"  # Alpha Vantage interval (1min, 5min, etc.)
-EXPIRATION = 5  # Expiration time in minutes
-UTC_OFFSET = -4  # Adjust for UTC-4 timezone
 
-# Fetch Forex Data
-def fetch_forex_data(from_symbol, to_symbol, interval="5min"):
-    try:
-        url = (
-            f"https://www.alphavantage.co/query?function=FX_INTRADAY&from_symbol={from_symbol}"
-            f"&to_symbol={to_symbol}&interval={interval}&apikey={ALPHA_VANTAGE_API_KEY}"
-        )
-        response = requests.get(url)
-        data = response.json()
-        if "Time Series FX (5min)" in data:
-            df = pd.DataFrame.from_dict(data["Time Series FX (5min)"], orient="index")
-            df.columns = ["Open", "High", "Low", "Close"]
-            df = df.astype(float)
-            df.index = pd.to_datetime(df.index)
-            return df
-        else:
-            print(f"Error fetching data: {data.get('Error Message', 'Unknown error')}")
-            return pd.DataFrame()
-    except Exception as e:
-        print(f"Error fetching data for {from_symbol}/{to_symbol}: {e}")
-        return pd.DataFrame()
+# Fetching market data
+def fetch_data(symbol, interval, outputsize="compact"):
+    base_url = "https://www.alphavantage.co/query"
+    params = {
+        "function": "TIME_SERIES_INTRADAY",
+        "symbol": symbol,
+        "interval": interval,
+        "apikey": ALPHA_API_KEY,
+        "datatype": "json",
+        "outputsize": outputsize,
+    }
+    response = requests.get(base_url, params=params)
+    data = response.json()
 
-# Generate Signal
-def generate_signal(data):
-    try:
-        data["RSI"] = (
-            100
-            - (100 / (1 + (data["Close"].pct_change().rolling(14).mean() / data["Close"].pct_change().rolling(14).std())))
-        )
-        if data["RSI"].iloc[-1] > 70:
-            return "SELL"
-        elif data["RSI"].iloc[-1] < 30:
-            return "BUY"
-        return None
-    except Exception as e:
-        print(f"Error generating signal: {e}")
-        return None
+    if "Time Series" not in response.text:
+        raise ValueError(f"Error fetching data for {symbol}: {response.text}")
 
-# Send Signal to Telegram
-def send_telegram_signal(session_name, session_emoji, signal, from_symbol, to_symbol, time_now):
-    bot = Bot(token=TELEGRAM_API_KEY)
-    expiration_time = time_now + timedelta(minutes=EXPIRATION)
-    martingale_times = [
-        (time_now + timedelta(minutes=EXPIRATION * i)).strftime("%H:%M") for i in range(1, 3)
-    ]
-    message = (
-        f"{session_emoji} {session_name.upper()} SESSION\n"
-        f"🗓 {datetime.now().strftime('%A, %B %d, %Y')}\n"
-        f"🇺🇸 {from_symbol}/{to_symbol} 🇯🇵 OTC\n"
-        f"🕘 Expiration {EXPIRATION}M\n"
-        f"⏺ Entry at {time_now.strftime('%H:%M')}\n"
-        f"🟥 {signal} 🟩\n\n"
-        f"🔽 Martingale levels\n"
-        f"1️⃣ level at {martingale_times[0]}\n"
-        f"2️⃣ level at {martingale_times[1]}"
+    timeseries_key = list(data.keys())[1]
+    df = pd.DataFrame(data[timeseries_key]).T
+    df.columns = ["Open", "High", "Low", "Close", "Volume"]
+    df.index = pd.to_datetime(df.index)
+    return df.sort_index()
+
+# Generate trading signals
+def generate_signals(data):
+    data["Close"] = data["Close"].astype(float)
+    data["RSI"] = (
+        data["Close"].diff().apply(lambda x: max(x, 0)).rolling(window=14).mean()
+        / data["Close"].diff().abs().rolling(window=14).mean()
+        * 100
     )
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    latest = data.iloc[-1]
+    rsi = latest["RSI"]
 
-# Main Function
+    if rsi > 70:
+        return "SELL"
+    elif rsi < 30:
+        return "BUY"
+    else:
+        return None
+
+# Send message to Telegram
+def send_telegram_message(session, symbol, signal, expiration_times):
+    if not signal:
+        return
+    now = datetime.now(EST).strftime("%A, %B %d, %Y %H:%M %p")
+    message = f"""
+{session}
+🗓 {now}
+🇺🇸 {symbol}
+🕘 Expiration 5M
+⏺ Entry now
+🟥 {signal} 🟩
+
+🔽 Martingale levels:
+1️⃣ level at {expiration_times[0]}
+2️⃣ level at {expiration_times[1]}
+"""
+    bot.send_message(chat_id=CHAT_ID, text=message)
+
+# Main function to run signals
 def main():
-    # Adjust to UTC-4 timezone
-    tz = pytz.timezone("Etc/GMT" + str(UTC_OFFSET))
-    now = datetime.now(tz)
+    symbols = ["USD/JPY", "EUR/USD", "BTC/USD"]
+    interval = "5min"
 
-    for session_name, session_info in SESSIONS.items():
-        session_start = now.replace(hour=int(session_info["start_time"].split(":")[0]), 
-                                     minute=int(session_info["start_time"].split(":")[1]), second=0)
-        if now >= session_start and (now - session_start).seconds < 3600:  # Check session timing
-            print(f"Generating signals for {session_name} Session {session_info['emoji']}...")
-            signals_sent = 0
-
-            for _ in range(SIGNALS_PER_SESSION):
-                for ticker in TICKERS:
-                    from_symbol = ticker["from"]
-                    to_symbol = ticker["to"]
-                    data = fetch_forex_data(from_symbol, to_symbol, interval=TIME_INTERVAL)
-                    if data.empty:
-                        print(f"No data available for {from_symbol}/{to_symbol}")
-                        continue
-
-                    signal = generate_signal(data)
-                    if signal:
-                        send_telegram_signal(session_name, session_info["emoji"], signal, from_symbol, to_symbol, now)
-                        signals_sent += 1
-                        time.sleep(60 * EXPIRATION)  # Wait before sending the next signal
-                if signals_sent >= SIGNALS_PER_SESSION:
-                    break
+    while True:
+        now = datetime.now(EST)
+        for session, times in SESSIONS.items():
+            if times["start"] <= now.hour < times["end"]:
+                for symbol in symbols:
+                    try:
+                        data = fetch_data(symbol, interval)
+                        signal = generate_signals(data)
+                        expiration_times = [
+                            (now + timedelta(minutes=5)).strftime("%H:%M"),
+                            (now + timedelta(minutes=10)).strftime("%H:%M"),
+                        ]
+                        send_telegram_message(session, symbol, signal, expiration_times)
+                    except Exception as e:
+                        bot.send_message(chat_id=CHAT_ID, text=f"Error fetching data for {symbol}: {e}")
+                break
+        time.sleep(3600)  # Wait for 1 hour before generating signals for the next session
 
 if __name__ == "__main__":
     main()
