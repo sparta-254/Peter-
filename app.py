@@ -4,7 +4,6 @@ import pandas as pd
 import pandas_ta as ta
 import yfinance as yf
 import requests
-import time
 from datetime import datetime
 
 # Telegram Bot Settings
@@ -47,23 +46,26 @@ def fetch_data(ticker, period, interval):
         return None
 
 # Signal Generation Function
-def generate_signal(data):
-    # Ensure 'Close' column exists
+def generate_signal(data, indicator):
     close_column = [col for col in data.columns if 'Close' in col]
     if not close_column:
         raise KeyError("'Close' column not found in the data.")
     close_column = close_column[0]
 
-    # Calculate indicators
-    data["RSI"] = ta.rsi(data[close_column], length=14)
-    data["SMA"] = ta.sma(data[close_column], length=14)
-
-    # Generate buy/sell signals based on RSI
+    # Generate signals based on the selected indicator
     signal = None
-    if data["RSI"].iloc[-1] > 70:
-        signal = "SELL"
-    elif data["RSI"].iloc[-1] < 30:
-        signal = "BUY"
+    if indicator == "RSI":
+        data["RSI"] = ta.rsi(data[close_column], length=14)
+        if data["RSI"].iloc[-1] > 70:
+            signal = "SELL"
+        elif data["RSI"].iloc[-1] < 30:
+            signal = "BUY"
+    elif indicator == "SMA":
+        data["SMA"] = ta.sma(data[close_column], length=14)
+        if data[close_column].iloc[-1] > data["SMA"].iloc[-1]:
+            signal = "BUY"
+        else:
+            signal = "SELL"
 
     return signal
 
@@ -93,9 +95,10 @@ def main():
     st.title("Trading Signal Dashboard")
 
     # User Inputs
-    ticker = st.sidebar.text_input("Enter Stock/Asset Ticker (e.g., AAPL, BTC-USD, EURJPY=X)", value="AAPL")
+    ticker = st.sidebar.text_input("Enter Stock/Asset Ticker (e.g., AAPL, BTC-USD, EURJPY=X)", value="BTC-USD")
     timeframe = st.sidebar.selectbox("Select Timeframe", ["1m", "5m", "15m", "1h", "1d"])
     period = "5d" if timeframe in ["1m", "5m"] else "1mo"
+    indicator = st.sidebar.selectbox("Select Indicator", ["RSI", "SMA"])
 
     # Fetch Data
     st.write(f"Fetching data for {ticker} with period '{period}' and interval '{timeframe}'...")
@@ -109,10 +112,12 @@ def main():
         current_hour = datetime.utcnow().hour
         for session, times in SESSIONS.items():
             if times["start"] <= current_hour < times["end"]:
-                signal = generate_signal(data)
+                signal = generate_signal(data, indicator)
                 if signal:
                     send_telegram_signal(ticker, signal, session, timeframe, expiration_time=5)
                     st.write(f"Signal for {session}: {signal}")
+                else:
+                    st.write(f"No valid signal generated for {session}.")
     else:
         st.warning("No data available. Please check the ticker or timeframe.")
 
