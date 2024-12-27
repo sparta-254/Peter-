@@ -15,6 +15,16 @@ def fetch_data(ticker, period, interval):
         # Fetch data using yfinance
         data = yf.download(ticker, period=period, interval=interval)
 
+        # Debug: Display column names to check data structure
+        st.write("Fetched data columns:", list(data.columns))
+
+        # Check if essential columns exist
+        required_columns = ["High", "Low", "Close"]
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        if missing_columns:
+            st.error(f"Missing required columns: {missing_columns}")
+            return None
+
         # Handle duplicate column names and multi-index columns
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(map(str, col)).strip() for col in data.columns]
