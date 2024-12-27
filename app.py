@@ -15,35 +15,37 @@ def fetch_data(ticker, period, interval):
         # Fetch data using yfinance
         data = yf.download(ticker, period=period, interval=interval)
 
-        # Ensure unique column names to prevent conflicts
-        if data.columns.duplicated().any():
+        # Handle duplicate column names and multi-index columns
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = ['_'.join(map(str, col)).strip() for col in data.columns]
+        elif data.columns.duplicated().any():
             data.columns = [f"{col}_{i}" if data.columns.duplicated()[i] else col 
                             for i, col in enumerate(data.columns)]
+        else:
+            data.columns = [str(col) for col in data.columns]
 
-        # Rename columns to simplify their names
-        data.columns = [col.split("_")[-1] for col in data.columns]
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
 
-# Function to Generate Trading Signals
+# Generate Trading Signals
 def generate_signals(data):
     signals = []
-
-    # Check for necessary columns
+    
+    # Ensure required columns exist
     if not all(col in data.columns for col in ["Close", "High", "Low"]):
         st.error("Missing required columns (High, Low, Close) in the data.")
         return signals
 
-    # Calculate RSI Signal
+    # Add RSI Signal
     data["RSI"] = ta.rsi(data["Close"], length=14)
     if data["RSI"].iloc[-1] > 70:
         signals.append("SELL (RSI Overbought)")
     elif data["RSI"].iloc[-1] < 30:
         signals.append("BUY (RSI Oversold)")
 
-    # Calculate SMA Signal
+    # Add SMA Signal
     data["SMA_50"] = ta.sma(data["Close"], length=50)
     data["SMA_200"] = ta.sma(data["Close"], length=200)
     if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
@@ -51,7 +53,7 @@ def generate_signals(data):
     elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
         signals.append("SELL (SMA Death Cross)")
 
-    # Calculate Stochastic Oscillator Signal
+    # Add Stochastic Oscillator Signal
     stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
     if stoch is not None:
         data["Stoch_K"] = stoch["STOCHk_14_3_3"]
@@ -77,9 +79,9 @@ def send_telegram_signal(ticker, signals):
 def main():
     st.title("Trading Signal Generator")
 
-    # Sidebar User Inputs
+    # User Inputs
     ticker = st.sidebar.text_input("Enter Ticker (e.g., AAPL, BTC-USD, EURUSD=X):", value="AAPL")
-    period = st.sidebar.selectbox("Select Data Period", ["1d", "5d", "1mo", "3mo", "6mo", "1y"])
+    period = st.sidebar.selectbox("Select Data Period", ["1d", "5d", "1mo", "3mo"])
     interval = st.sidebar.selectbox("Select Data Interval", ["1m", "5m", "15m", "1h", "1d"])
 
     # Fetch Data
@@ -87,12 +89,11 @@ def main():
 
     if data is not None:
         st.write(f"Data for {ticker}:")
-        st.dataframe(data.head())  # Display the first few rows of the data
+        st.write(data.head())  # Display data safely
 
-        # Generate Trading Signals
+        # Generate Signals
         signals = generate_signals(data)
         if signals:
-            # Send Signals to Telegram
             send_telegram_signal(ticker, signals)
             st.success(f"Signals sent to Telegram: {', '.join(signals)}")
         else:
