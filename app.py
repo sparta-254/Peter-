@@ -14,8 +14,12 @@ TELEGRAM_CHAT_ID = "6891630125"
 def fetch_data(ticker, period, interval):
     try:
         data = yf.download(ticker, period=period, interval=interval)
+        
+        # Flatten MultiIndex columns and ensure unique column names
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = ['_'.join(col).strip() for col in data.columns]
+        data.columns = pd.io.parsers.ParserBase({'names': data.columns})._maybe_dedup_names(data.columns)
+        
         data = data.rename(columns=lambda x: x.split("_")[-1])  # Standardize column names
         return data
     except Exception as e:
