@@ -6,7 +6,8 @@ import time
 from telegram import Bot
 
 # Telegram Bot API Setup
-TELEGRAM_API_KEY = "7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
+TELEGRAM_BOT_TOKEN = 
+"7698456329:AAEwPn0U9FiNzA-jqsVOp_KLVqVvQx-BxIE"
 TELEGRAM_CHAT_ID = "6891630125"
 
 # Alpha Vantage API Setup
