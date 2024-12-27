@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import talib as ta
+import pandas_ta as ta
 from datetime import datetime, timedelta
 import requests
 
@@ -36,15 +36,15 @@ def generate_signals(data):
 
     try:
         # Calculate RSI
-        data["RSI"] = ta.RSI(data["Close"], timeperiod=14)
+        data["RSI"] = ta.rsi(data["Close"], length=14)
         if data["RSI"].iloc[-1] > 70:
             signals.append("SELL (RSI Overbought)")
         elif data["RSI"].iloc[-1] < 30:
             signals.append("BUY (RSI Oversold)")
 
         # Calculate SMA Crossovers
-        data["SMA_50"] = ta.SMA(data["Close"], timeperiod=50)
-        data["SMA_200"] = ta.SMA(data["Close"], timeperiod=200)
+        data["SMA_50"] = ta.sma(data["Close"], length=50)
+        data["SMA_200"] = ta.sma(data["Close"], length=200)
         if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
             signals.append("BUY (SMA Golden Cross)")
         elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
