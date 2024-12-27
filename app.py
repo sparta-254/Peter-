@@ -39,9 +39,16 @@ def generate_signals(data):
     if "Close" not in data.columns or "High" not in data.columns or "Low" not in data.columns:
         st.error("Missing required columns (High, Low, Close) in the data.")
         return signals
-    
+
+    # Ensure sufficient data rows for calculations
+    if len(data) < 15:
+        st.error("Not enough data for signal calculations.")
+        return signals
+
     # Add RSI Signal
     data["RSI"] = ta.rsi(data["Close"], length=14)
+    data["RSI"].fillna(50, inplace=True)  # Replace NaN values with neutral RSI (50)
+    
     if data["RSI"].iloc[-1] > 70:
         signals.append("SELL (RSI Overbought)")
     elif data["RSI"].iloc[-1] < 30:
@@ -50,10 +57,11 @@ def generate_signals(data):
     # Add SMA Signal
     data["SMA_50"] = ta.sma(data["Close"], length=50)
     data["SMA_200"] = ta.sma(data["Close"], length=200)
-    if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
-        signals.append("BUY (SMA Golden Cross)")
-    elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
-        signals.append("SELL (SMA Death Cross)")
+    if pd.notna(data["SMA_50"].iloc[-1]) and pd.notna(data["SMA_200"].iloc[-1]):
+        if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
+            signals.append("BUY (SMA Golden Cross)")
+        elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
+            signals.append("SELL (SMA Death Cross)")
 
     # Add Stochastic Oscillator Signal
     stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
