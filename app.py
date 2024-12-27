@@ -12,32 +12,38 @@ TELEGRAM_CHAT_ID = "6891630125"
 # Function to Fetch Data
 def fetch_data(ticker, period, interval):
     try:
+        # Fetch data using yfinance
         data = yf.download(ticker, period=period, interval=interval)
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = ['_'.join(col).strip() for col in data.columns]
-        data = data.rename(columns=lambda x: x.split("_")[-1])  # Standardize column names
+
+        # Ensure unique column names to prevent conflicts
+        if data.columns.duplicated().any():
+            data.columns = [f"{col}_{i}" if data.columns.duplicated()[i] else col 
+                            for i, col in enumerate(data.columns)]
+
+        # Rename columns to simplify their names
+        data.columns = [col.split("_")[-1] for col in data.columns]
         return data
     except Exception as e:
         st.error(f"Error fetching data: {e}")
         return None
 
-# Generate Trading Signals
+# Function to Generate Trading Signals
 def generate_signals(data):
     signals = []
-    
-    # Ensure required columns exist
-    if "Close" not in data.columns or "High" not in data.columns or "Low" not in data.columns:
+
+    # Check for necessary columns
+    if not all(col in data.columns for col in ["Close", "High", "Low"]):
         st.error("Missing required columns (High, Low, Close) in the data.")
         return signals
-    
-    # Add RSI Signal
+
+    # Calculate RSI Signal
     data["RSI"] = ta.rsi(data["Close"], length=14)
     if data["RSI"].iloc[-1] > 70:
         signals.append("SELL (RSI Overbought)")
     elif data["RSI"].iloc[-1] < 30:
         signals.append("BUY (RSI Oversold)")
 
-    # Add SMA Signal
+    # Calculate SMA Signal
     data["SMA_50"] = ta.sma(data["Close"], length=50)
     data["SMA_200"] = ta.sma(data["Close"], length=200)
     if data["SMA_50"].iloc[-1] > data["SMA_200"].iloc[-1]:
@@ -45,16 +51,15 @@ def generate_signals(data):
     elif data["SMA_50"].iloc[-1] < data["SMA_200"].iloc[-1]:
         signals.append("SELL (SMA Death Cross)")
 
-    # Add Stochastic Oscillator Signal (if data has High/Low/Close)
-    if "High" in data.columns and "Low" in data.columns and "Close" in data.columns:
-        stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
-        if stoch is not None:
-            data["Stoch_K"] = stoch["STOCHk_14_3_3"]
-            data["Stoch_D"] = stoch["STOCHd_14_3_3"]
-            if data["Stoch_K"].iloc[-1] > 80:
-                signals.append("SELL (Stochastic Overbought)")
-            elif data["Stoch_K"].iloc[-1] < 20:
-                signals.append("BUY (Stochastic Oversold)")
+    # Calculate Stochastic Oscillator Signal
+    stoch = ta.stoch(data["High"], data["Low"], data["Close"], k=14, d=3)
+    if stoch is not None:
+        data["Stoch_K"] = stoch["STOCHk_14_3_3"]
+        data["Stoch_D"] = stoch["STOCHd_14_3_3"]
+        if data["Stoch_K"].iloc[-1] > 80:
+            signals.append("SELL (Stochastic Overbought)")
+        elif data["Stoch_K"].iloc[-1] < 20:
+            signals.append("BUY (Stochastic Oversold)")
 
     return signals
 
@@ -72,9 +77,9 @@ def send_telegram_signal(ticker, signals):
 def main():
     st.title("Trading Signal Generator")
 
-    # User Inputs
+    # Sidebar User Inputs
     ticker = st.sidebar.text_input("Enter Ticker (e.g., AAPL, BTC-USD, EURUSD=X):", value="AAPL")
-    period = st.sidebar.selectbox("Select Data Period", ["1d", "5d", "1mo", "3mo"])
+    period = st.sidebar.selectbox("Select Data Period", ["1d", "5d", "1mo", "3mo", "6mo", "1y"])
     interval = st.sidebar.selectbox("Select Data Interval", ["1m", "5m", "15m", "1h", "1d"])
 
     # Fetch Data
@@ -82,11 +87,12 @@ def main():
 
     if data is not None:
         st.write(f"Data for {ticker}:")
-        st.dataframe(data.head())
+        st.dataframe(data.head())  # Display the first few rows of the data
 
-        # Generate Signals
+        # Generate Trading Signals
         signals = generate_signals(data)
         if signals:
+            # Send Signals to Telegram
             send_telegram_signal(ticker, signals)
             st.success(f"Signals sent to Telegram: {', '.join(signals)}")
         else:
